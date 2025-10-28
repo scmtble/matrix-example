@@ -31,9 +31,10 @@ jobs:
     name: Run Matrix Job
     runs-on: ubuntu-latest
     needs: [detect-changes]
+    if: needs.detect-changes.outputs.modified_keys != '[]'
     strategy:
       matrix: 
-        app: ${{ needs.detect-changes.outputs.modified_keys }}
+        app: ${{ fromJSON(needs.detect-changes.outputs.modified_keys) }}
       max-parallel: 4
       fail-fast: false
     steps:
