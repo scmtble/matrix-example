@@ -8,17 +8,16 @@ jobs:
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-      has-changes: ${{ steps.set-matrix.outputs.has-changes }}
+      matrix: ${{ steps.changed-files.outputs.all_changed_files }}
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      
       - name: Get changed files
         id: changed-files
         uses: tj-actions/changed-files@v47
         with:
+          matrix: true
           files_yaml: |
             frontend:
               - 'frontend/**'
@@ -28,55 +27,18 @@ jobs:
               - 'database/**'
             docs:
               - 'docs/**'
-      
-      - name: Set matrix based on changes
-        id: set-matrix
-        run: |
-          matrix_jobs=()
-          
-          if [ "${{ steps.changed-files.outputs.frontend_any_changed }}" == "true" ]; then
-            matrix_jobs+=('{"name":"frontend","test":"npm test","build":"npm run build","path":"./frontend"}')
-          fi
-          
-          if [ "${{ steps.changed-files.outputs.backend_any_changed }}" == "true" ]; then
-            matrix_jobs+=('{"name":"backend","test":"pytest","build":"python setup.py build","path":"./backend"}')
-          fi
-          
-          if [ "${{ steps.changed-files.outputs.database_any_changed }}" == "true" ]; then
-            matrix_jobs+=('{"name":"database","test":"npm run test:db","build":"npm run migrate","path":"./migrations"}')
-          fi
-          
-          if [ "${{ steps.changed-files.outputs.docs_any_changed }}" == "true" ]; then
-            matrix_jobs+=('{"name":"docs","test":"npm run lint:docs","build":"npm run build:docs","path":"./docs"}')
-          fi
-          
-          if [ ${#matrix_jobs[@]} -eq 0 ]; then
-            echo "has-changes=false" >> $GITHUB_OUTPUT
-            echo "matrix={\"include\":[]}" >> $GITHUB_OUTPUT
-          else
-            echo "has-changes=true" >> $GITHUB_OUTPUT
-            matrix_json=$(printf "%s," "${matrix_jobs[@]}" | sed 's/,$//')
-            echo "matrix={\"include\":[$matrix_json]}" >> $GITHUB_OUTPUT
-          fi
-          
-          echo "Generated matrix: {\"include\":[$matrix_json]}"
-
-  matrix-execution:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.has-changes == 'true'
+  matrix-job:
+    name: Run Matrix Job
     runs-on: ubuntu-latest
+    needs: [detect-changes]
     strategy:
-      matrix: ${{ fromJson(needs.detect-changes.outputs.matrix) }}
+      matrix: 
+        files: ${{ fromJSON(needs.detect-changes.outputs.matrix) }}
+      max-parallel: 4
       fail-fast: false
-    
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v5
-      
-      - name: Run tests for ${{ matrix.name }}
-        working-directory: ${{ matrix.path }}
-        run: ${{ matrix.test }}
-      
-      - name: Build ${{ matrix.name }}
-        working-directory: ${{ matrix.path }}
-        run: ${{ matrix.build }}
+      - name: Test
+        run: |
+          echo ${{ matrix }}
